@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { $, file } from "bun"
+import { $ } from "bun"
 
 const colors = {
   cyan: "\x1b[36m",
@@ -70,9 +70,16 @@ function displayStats(
   )
 }
 
+export const hasGit = async (): Promise<boolean> => {
+  try {
+    return (await $`git rev-parse --is-inside-work-tree`.quiet()).exitCode === 0
+  } catch {
+    return false
+  }
+}
+
 async function gdtt() {
-  // ultra-fast git dir check
-  if (!(await file(".git").exists())) {
+  if (!(await hasGit())) {
     console.error(`Error: not a git repository (${process.cwd()})`)
     process.exit(1)
   }
