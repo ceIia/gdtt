@@ -86,6 +86,14 @@ async function gdtt() {
 
   try {
     const output = await $`git diff --numstat @{upstream}`.quiet().text()
+
+    // fast check for no changes - avoid expensive parsing
+    if (!output.trim()) {
+      console.log(`${colors.cyan}no changes!${colors.reset}`)
+      return
+    }
+
+    // only parse and display if there are changes
     const stats = parseGitOutput(output)
     displayStats(
       stats.additions,
