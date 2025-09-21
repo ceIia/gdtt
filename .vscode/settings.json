@@ -1,0 +1,27 @@
+{
+  "[javascript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "editor.codeActionsOnSave": {
+    "source.action.useSortedAttributes.biome": "explicit", // sorts imports on save
+    "source.action.useSortedKeys.biome": "explicit", // sorts object keys on save
+    "source.fixAll.biome": "explicit", // fixes all errors on save
+    "source.organizeImports.biome": "explicit" // sorts imports on save
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
+}

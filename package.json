@@ -1,0 +1,41 @@
+{
+  "name": "gdtt",
+  "description": "counts total lines & files diff in the current git repository",
+  "version": "1.0.0",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@biomejs/biome": "2.2.4",
+    "@c14l/biome-config": "2.0.0",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "bin": {
+    "gdtt": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "bun build index.ts --minify --target node --outfile ./dist/index.js",
+    "check": "biome check .",
+    "format": "biome format . --write",
+    "lint": "biome lint . --write",
+    "prepublishOnly": "bun check && bun run build"
+  },
+  "files": ["dist", "README.md"],
+  "author": "ceIia <me@celiabourial.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ceIia/gdtt"
+  },
+  "bugs": "https://github.com/ceIia/gdtt/issues",
+  "homepage": "https://github.com/ceIia/gdtt",
+  "keywords": [
+    "gdtt",
+    "git",
+    "diff",
+    "lines",
+    "files"
+  ]
+}

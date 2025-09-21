@@ -1,0 +1,18 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+  "extends": ["@c14l/biome-config"],
+  "linter": {
+    "rules": {
+      "suspicious": {
+        "noAlert": "error",
+        "noConsole": {
+          "level": "error",
+          "options": {
+            // we allow console.log because it's a logger package
+            "allow": ["log", "assert", "error", "info", "warn"]
+          }
+        }
+      }
+    }
+  }
+}
