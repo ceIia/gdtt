@@ -1,14 +1,20 @@
 name: ci
 
 on:
-  push:
   pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: setup bun
         uses: oven-sh/setup-bun@v2
@@ -16,18 +22,23 @@ jobs:
       - name: install dependencies
         run: bun install
 
-      - name: run biome checks
-        run: bun run check
-
       - name: build
         run: bun run build
 
-  # Additional job only for main and PRs to main
+      - name: run biome checks
+        run: bun run check
+
+      - name: run tests
+        run: bun test
+
+  # additional job only for pushes to main
   publish-check:
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: setup bun
         uses: oven-sh/setup-bun@v2
@@ -36,6 +47,9 @@ jobs:
 
       - name: install dependencies
         run: bun install
+
+      - name: build
+        run: bun run build
 
       - name: dry run publish
         run: bun publish --dry-run

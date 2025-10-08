@@ -1,12 +1,15 @@
 #!/usr/bin/env bun
-
 import { $ } from "bun"
 
+const REMOTE_HEAD_REF_REGEX = /^ref:\s+refs\/heads\/([^\s]+)\s+HEAD/m
+
+// honor standard no_color to disable ansi output
+const noColor = "NO_COLOR" in process.env
 const colors = {
-  cyan: "\x1b[36m",
-  green: "\x1b[32m",
-  red: "\x1b[31m",
-  reset: "\x1b[0m",
+  cyan: noColor ? "" : "\x1b[36m",
+  green: noColor ? "" : "\x1b[32m",
+  red: noColor ? "" : "\x1b[31m",
+  reset: noColor ? "" : "\x1b[0m",
 }
 
 function parseGitOutput(output: string) {
@@ -61,12 +64,13 @@ function displayStats(
   filesWithAdditions: number,
   filesWithDeletions: number,
 ) {
-  const total = additions + deletions
+  const { green: g, red: r, cyan: c, reset: _ } = colors
   const { addBar, delBar } = createBars(additions, deletions)
 
   console.log(
-    `${colors.green}+${additions}${colors.reset} ${colors.red}-${deletions}${colors.reset} ${colors.cyan}Σ${total}${colors.reset} | ${colors.green}+${filesWithAdditions}${colors.reset} ${colors.red}-${filesWithDeletions}${colors.reset} files\n` +
-      `${colors.green}${addBar}${colors.reset}${colors.red}${delBar}${colors.reset}`,
+    `${g}+${additions}${_} ${r}-${deletions}${_} ${c}Σ${additions + deletions}${_} | ` +
+      `${g}+${filesWithAdditions}${_} ${r}-${filesWithDeletions}${_} files\n` +
+      `${g}${addBar}${_}${r}${delBar}${_}`,
   )
 }
 
@@ -78,14 +82,129 @@ export const hasGit = async (): Promise<boolean> => {
   }
 }
 
+// detect the default remote branch dynamically
+async function getDefaultBranch(): Promise<string> {
+  try {
+    // 1) check local cached symbolic ref for origin/HEAD
+    const localHead = await $`git symbolic-ref --short refs/remotes/origin/HEAD`
+      .nothrow()
+      .quiet()
+    if (localHead.exitCode === 0) {
+      const headRef = localHead.text().trim() // e.g. origin/main
+      if (headRef) return headRef
+    }
+
+    // 2) common defaults present locally (remote-tracking refs)
+    for (const name of ["main", "master", "trunk", "default", "develop"]) {
+      const res =
+        await $`git show-ref --verify --quiet refs/remotes/origin/${name}`
+          .nothrow()
+          .quiet()
+      if (res.exitCode === 0) return `origin/${name}`
+    }
+
+    // 3) try current branch's upstream if configured
+    const upstream =
+      await $`git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`
+        .nothrow()
+        .quiet()
+    if (upstream.exitCode === 0) {
+      const upstreamRef = upstream.text().trim()
+      if (upstreamRef) return upstreamRef
+    }
+
+    // 4) one remote query as a last resort
+    const lsRemote = await $`git ls-remote --symref origin HEAD`
+      .nothrow()
+      .quiet()
+    if (lsRemote.exitCode === 0) {
+      const text = lsRemote.text()
+      const match = REMOTE_HEAD_REF_REGEX.exec(text)
+      if (match?.[1]) return `origin/${match[1]}`
+    }
+
+    // 5) give up gracefully
+    return "origin/main"
+  } catch {
+    return "origin/main"
+  }
+}
+
+function showHelp() {
+  console.log(`usage: gdtt [options]
+
+options:
+  -u, --upstream       compare against upstream (unpushed changes)
+  -b, --base <branch>  compare against specific branch
+  --committed-only     exclude uncommitted changes
+  -h, --help           show this help
+
+default: compares against origin/main (or origin/master)`)
+  process.exit(0)
+}
+
+function parseArgs() {
+  const args = process.argv.slice(2)
+  let base: string | null = null
+  let upstream = false
+  let committedOnly = false
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+
+    if (arg === "-h" || arg === "--help") {
+      showHelp()
+    }
+
+    if (arg === "-u" || arg === "--upstream") {
+      upstream = true
+      continue
+    }
+
+    if (arg === "--committed-only") {
+      committedOnly = true
+      continue
+    }
+
+    if (arg === "-b" || arg === "--base") {
+      if (i + 1 >= args.length) {
+        console.error("Error: -b/--base requires a branch name")
+        process.exit(1)
+      }
+      base = args[++i]
+      continue
+    }
+
+    console.error(`Error: unknown option '${arg}'`)
+    process.exit(1)
+  }
+
+  return { base, committedOnly, upstream }
+}
+
 async function gdtt() {
   if (!(await hasGit())) {
     console.error(`Error: not a git repository (${process.cwd()})`)
     process.exit(1)
   }
 
+  const { base, upstream, committedOnly } = parseArgs()
+
   try {
-    const output = await $`git diff --numstat @{upstream}`.quiet().text()
+    let compareRef: string
+
+    if (upstream) {
+      compareRef = "@{upstream}"
+    } else if (base) {
+      compareRef = base
+    } else {
+      compareRef = await getDefaultBranch()
+    }
+
+    // use HEAD for committed-only, otherwise include working directory
+    const output = committedOnly
+      ? await $`git diff --numstat ${compareRef} HEAD`.quiet().text()
+      : await $`git diff --numstat ${compareRef}`.quiet().text()
 
     // fast check for no changes - avoid expensive parsing
     if (!output.trim()) {

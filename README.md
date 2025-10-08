@@ -1,12 +1,23 @@
 # gdtt
 
-fast git diff stats vs upstream
+fast git diff stats
 
 ## install
 
 ```bash
-bunx gdtt
+bunx gdtt@latest
 ```
+
+## usage
+
+```bash
+gdtt                      # compare against origin/main (full PR diff)
+gdtt -u                   # compare against upstream (unpushed changes)
+gdtt -b develop           # compare against specific branch
+gdtt --committed-only     # exclude uncommitted changes
+```
+
+**default behavior**: shows total diff including uncommitted + unpushed changes
 
 ## output
 

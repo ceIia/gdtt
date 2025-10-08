@@ -24,6 +24,9 @@ jobs:
       - name: build
         run: bun run build
 
+      - name: run tests
+        run: bun test
+
       - name: publish to npm
         run: bun publish
         env:
