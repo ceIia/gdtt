@@ -16,14 +16,14 @@ jobs:
       - name: install dependencies
         run: bun install
 
+      - name: build
+        run: bun run build
+
       - name: run biome checks
         run: bun run check
 
       - name: run tests
         run: bun test
-
-      - name: build
-        run: bun run build
 
   # Additional job only for main and PRs to main
   publish-check:
@@ -39,6 +39,9 @@ jobs:
 
       - name: install dependencies
         run: bun install
+
+      - name: build
+        run: bun run build
 
       - name: dry run publish
         run: bun publish --dry-run
