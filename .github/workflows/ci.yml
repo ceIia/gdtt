@@ -19,6 +19,9 @@ jobs:
       - name: run biome checks
         run: bun run check
 
+      - name: run tests
+        run: bun test
+
       - name: build
         run: bun run build
 
