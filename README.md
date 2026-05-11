@@ -14,10 +14,11 @@ bunx gdtt@latest
 gdtt                      # compare against origin/main (full PR diff)
 gdtt -u                   # compare against upstream (unpushed changes)
 gdtt -b develop           # compare against specific branch
-gdtt --committed-only     # exclude uncommitted changes
+gdtt --committed-only     # exclude uncommitted and untracked changes
+gdtt --no-untracked       # exclude untracked files
 ```
 
-**default behavior**: shows total diff including uncommitted + unpushed changes
+**default behavior**: shows total diff including uncommitted, unpushed, and untracked changes
 
 ## output
 

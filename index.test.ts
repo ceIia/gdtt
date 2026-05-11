@@ -154,6 +154,45 @@ describe("gdtt default behavior", () => {
     expect(stats).not.toBeNull()
     expect(stats!.additions).toBeGreaterThan(0)
   })
+
+  test("includes untracked files", async () => {
+    await initGitRepo(testDir)
+    await setupRemote(testDir)
+
+    await $`printf "one\ntwo\n" > ${testDir}/untracked.txt`.quiet()
+
+    const result = await runGdtt(testDir)
+    expect(result.exitCode).toBe(0)
+
+    const stats = parseOutput(result.stdout)
+    expect(stats).not.toBeNull()
+    expect(stats!.additions).toBe(2)
+    expect(stats!.deletions).toBe(0)
+    expect(stats!.filesAdded).toBe(1)
+    expect(stats!.filesDeleted).toBe(0)
+  })
+
+  test("excludes untracked files with --no-untracked", async () => {
+    await initGitRepo(testDir)
+    await setupRemote(testDir)
+
+    await $`printf "one\ntwo\n" > ${testDir}/untracked.txt`.quiet()
+
+    const result = await runGdtt(testDir, ["--no-untracked"])
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain("no changes!")
+  })
+
+  test("excludes untracked files with --exclude-untracked", async () => {
+    await initGitRepo(testDir)
+    await setupRemote(testDir)
+
+    await $`printf "one\ntwo\n" > ${testDir}/untracked.txt`.quiet()
+
+    const result = await runGdtt(testDir, ["--exclude-untracked"])
+    expect(result.exitCode).toBe(0)
+    expect(result.stdout).toContain("no changes!")
+  })
 })
 
 describe("gdtt --committed-only flag", () => {
@@ -163,6 +202,7 @@ describe("gdtt --committed-only flag", () => {
 
     // make uncommitted changes
     await $`echo "new line" >> ${testDir}/README.md`.quiet()
+    await $`echo "untracked" > ${testDir}/untracked.txt`.quiet()
 
     const result = await runGdtt(testDir, ["--committed-only"])
     expect(result.exitCode).toBe(0)
@@ -223,6 +263,30 @@ describe("gdtt -u/--upstream flag", () => {
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain("no changes!")
   })
+
+  test("falls back to default branch when no upstream is configured", async () => {
+    await initGitRepo(testDir)
+    await setupRemote(testDir)
+
+    await $`git -C ${testDir} checkout -b feature/no-upstream`.quiet()
+
+    const upstream =
+      await $`git -C ${testDir} rev-parse --abbrev-ref --symbolic-full-name @{upstream}`
+        .nothrow()
+        .quiet()
+    expect(upstream.exitCode).not.toBe(0)
+
+    await $`echo "feature work" >> ${testDir}/feature.txt`.quiet()
+    await $`git -C ${testDir} add .`.quiet()
+    await $`git -C ${testDir} commit -m "add feature"`.quiet()
+
+    const result = await runGdtt(testDir, ["-u"])
+    expect(result.exitCode).toBe(0)
+
+    const stats = parseOutput(result.stdout)
+    expect(stats).not.toBeNull()
+    expect(stats!.additions).toBeGreaterThan(0)
+  })
 })
 
 describe("gdtt -b/--base flag", () => {
@@ -264,6 +328,7 @@ describe("gdtt help", () => {
     expect(result.stdout).toContain("--upstream")
     expect(result.stdout).toContain("--base")
     expect(result.stdout).toContain("--committed-only")
+    expect(result.stdout).toContain("--no-untracked")
   })
 
   test("shows help with --help flag", async () => {
