@@ -1,4 +1,7 @@
 #!/usr/bin/env bun
+import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { $ } from "bun"
 
 const REMOTE_HEAD_REF_REGEX = /^ref:\s+refs\/heads\/([^\s]+)\s+HEAD/m
@@ -130,16 +133,72 @@ async function getDefaultBranch(): Promise<string> {
   }
 }
 
+async function getUpstreamBranch(): Promise<string> {
+  const upstream =
+    await $`git rev-parse --abbrev-ref --symbolic-full-name @{upstream}`
+      .nothrow()
+      .quiet()
+
+  if (upstream.exitCode === 0) {
+    const upstreamRef = upstream.text().trim()
+    if (upstreamRef) return upstreamRef
+  }
+
+  return getDefaultBranch()
+}
+
+async function getUntrackedPaths(): Promise<string[]> {
+  const output = await $`git ls-files --others --exclude-standard -z`
+    .quiet()
+    .text()
+
+  return output.split("\0").filter(Boolean)
+}
+
+async function getDiffOutput(
+  compareRef: string,
+  includeUntracked: boolean,
+): Promise<string> {
+  if (!includeUntracked) {
+    return await $`git diff --numstat ${compareRef}`.quiet().text()
+  }
+
+  const untrackedPaths = await getUntrackedPaths()
+  if (untrackedPaths.length === 0) {
+    return await $`git diff --numstat ${compareRef}`.quiet().text()
+  }
+
+  const tmpDir = await mkdtemp(join(tmpdir(), "gdtt-index-"))
+  const tmpIndex = join(tmpDir, "index")
+  const pathspecFile = join(tmpDir, "pathspecs")
+
+  try {
+    const realIndex = await $`git rev-parse --git-path index`.quiet().text()
+    await copyFile(realIndex.trim(), tmpIndex)
+    await writeFile(pathspecFile, `${untrackedPaths.join("\0")}\0`)
+
+    await $`env GIT_INDEX_FILE=${tmpIndex} git add -N --pathspec-from-file=${pathspecFile} --pathspec-file-nul`.quiet()
+
+    return await $`env GIT_INDEX_FILE=${tmpIndex} git diff --numstat ${compareRef}`
+      .quiet()
+      .text()
+  } finally {
+    await rm(tmpDir, { force: true, recursive: true })
+  }
+}
+
 function showHelp() {
   console.log(`usage: gdtt [options]
 
 options:
-  -u, --upstream       compare against upstream (unpushed changes)
-  -b, --base <branch>  compare against specific branch
-  --committed-only     exclude uncommitted changes
-  -h, --help           show this help
+  -u, --upstream                 compare against upstream (unpushed changes)
+  -b, --base <branch>            compare against specific branch
+  --committed-only               exclude uncommitted and untracked changes
+  --no-untracked                 exclude untracked files
+  --exclude-untracked            alias for --no-untracked
+  -h, --help                     show this help
 
-default: compares against origin/main (or origin/master)`)
+default: compares against origin/main (or origin/master), including untracked files`)
   process.exit(0)
 }
 
@@ -148,38 +207,42 @@ function parseArgs() {
   let base: string | null = null
   let upstream = false
   let committedOnly = false
+  let excludeUntracked = false
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
 
-    if (arg === "-h" || arg === "--help") {
-      showHelp()
-    }
-
-    if (arg === "-u" || arg === "--upstream") {
-      upstream = true
-      continue
-    }
-
-    if (arg === "--committed-only") {
-      committedOnly = true
-      continue
-    }
-
-    if (arg === "-b" || arg === "--base") {
-      if (i + 1 >= args.length) {
-        console.error("Error: -b/--base requires a branch name")
+    switch (arg) {
+      case "-h":
+      case "--help":
+        showHelp()
+        break
+      case "-u":
+      case "--upstream":
+        upstream = true
+        break
+      case "--committed-only":
+        committedOnly = true
+        break
+      case "--no-untracked":
+      case "--exclude-untracked":
+        excludeUntracked = true
+        break
+      case "-b":
+      case "--base":
+        if (i + 1 >= args.length) {
+          console.error("Error: -b/--base requires a branch name")
+          process.exit(1)
+        }
+        base = args[++i]
+        break
+      default:
+        console.error(`Error: unknown option '${arg}'`)
         process.exit(1)
-      }
-      base = args[++i]
-      continue
     }
-
-    console.error(`Error: unknown option '${arg}'`)
-    process.exit(1)
   }
 
-  return { base, committedOnly, upstream }
+  return { base, committedOnly, excludeUntracked, upstream }
 }
 
 async function gdtt() {
@@ -188,13 +251,13 @@ async function gdtt() {
     process.exit(1)
   }
 
-  const { base, upstream, committedOnly } = parseArgs()
+  const { base, upstream, committedOnly, excludeUntracked } = parseArgs()
 
   try {
     let compareRef: string
 
     if (upstream) {
-      compareRef = "@{upstream}"
+      compareRef = await getUpstreamBranch()
     } else if (base) {
       compareRef = base
     } else {
@@ -204,7 +267,7 @@ async function gdtt() {
     // use HEAD for committed-only, otherwise include working directory
     const output = committedOnly
       ? await $`git diff --numstat ${compareRef} HEAD`.quiet().text()
-      : await $`git diff --numstat ${compareRef}`.quiet().text()
+      : await getDiffOutput(compareRef, !excludeUntracked)
 
     // fast check for no changes - avoid expensive parsing
     if (!output.trim()) {
